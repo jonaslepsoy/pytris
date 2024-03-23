@@ -4,7 +4,7 @@ import random
 FPS = 60
 GAME_SPEED = 5
 
-ELEMENT_SIZE = 16
+ELEMENT_SIZE = 32
 BLOCKS_WIDTH = 10
 BLOCKS_HEIGHT = 20
 WIDTH = ELEMENT_SIZE * BLOCKS_WIDTH
@@ -72,6 +72,11 @@ class Game:
       for event in pygame.event.get():
           if event.type == PIECEEVENT:
             if piece.stop:
+                ## Check if we made any lines
+              lines = self.landed_pieces.check_lines()
+              if len(lines) > 0:
+                self.landed_pieces.clear_lines(lines)
+
               if self.piece_counter == 7:
                 random.shuffle(self.piece_list)
                 self.piece_counter = 0
@@ -96,10 +101,10 @@ class Game:
               game_over = True
 
       self.landed_pieces.draw(self.screen)
-              
+      piece.draw(self.screen)
+
       if piece.stop:
         self.landed_pieces.store(piece)
-      piece.draw(self.screen)
 
       pygame.display.update()
 
@@ -108,6 +113,23 @@ class Landed_Pieces:
     print("We got the pieces")
     self.grid = [[0]*BLOCKS_WIDTH for i in range(BLOCKS_HEIGHT)]
   
+  def check_lines(self):
+    lines_to_clear = []
+    for y in range(0, BLOCKS_HEIGHT):
+      line_full = True
+      for x in self.grid[y]:
+        if x == 0:
+          line_full = False
+      if line_full:
+        lines_to_clear.append(y)
+    return lines_to_clear
+
+  def clear_lines(self, lines):
+    print("Clearing some lines")
+    for line in lines:
+      self.grid.pop(line)
+      self.grid.insert(0, [0]*BLOCKS_WIDTH)
+
   def get_square(self, x, y):
     #print("Checking", y, BLOCKS_HEIGHT)
     if y < BLOCKS_HEIGHT:
@@ -197,7 +219,7 @@ class Piece:
         self.color = PURPLE
         self.rotationMatrix = [
           [(1,0), (0,1), (1,1), (2,1)],
-          [(0,1), (1,1), (2,1), (1,2)],
+          [(1,0), (1,1), (2,1), (1,2)],
           [(0,1), (1,1), (2,1), (1,2)],
           [(1,0), (0,1), (1,1), (1,2)]
         ]
