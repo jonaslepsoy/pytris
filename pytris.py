@@ -2,9 +2,9 @@ import pygame
 import random
 
 FPS = 60
-GAME_SPEED = 5
+GAME_SPEED = 2
 
-ELEMENT_SIZE = 32
+ELEMENT_SIZE = 48
 BLOCKS_WIDTH = 10
 BLOCKS_HEIGHT = 20
 WIDTH = ELEMENT_SIZE * BLOCKS_WIDTH
@@ -35,7 +35,8 @@ REG_S = 5
 INV_S = 6
 T = 7
 
-PIECEEVENT = pygame.USEREVENT + 1
+GAME_TICK = pygame.USEREVENT + 1
+PIECEEVENT = pygame.USEREVENT + 2
 
 class Game:
   def __init__(self):
@@ -50,8 +51,8 @@ class Game:
     random.shuffle(self.piece_list)
     self.piece_counter = 0
     self.screen = pygame.display.set_mode([WIDTH, HEIGHT])
-    #pygame.time.set_timer(pygame.USEREVENT + 1, 1000 // FPS)
-    pygame.time.set_timer(PIECEEVENT, 1000)
+    pygame.time.set_timer(GAME_TICK, 1000 // FPS)
+    pygame.time.set_timer(PIECEEVENT, 1000 // GAME_SPEED)
 
   def run(self):
     print("Running game")
@@ -62,51 +63,51 @@ class Game:
 
     while not game_over:
       self.clock.tick(FPS)
-      self.screen.fill(GREY)
-      # Draw Grid
-      for y in range(0, HEIGHT, ELEMENT_SIZE):
-        pygame.draw.line(self.screen, BLACK, [0, y], [WIDTH, y])
-      for x in range(0, WIDTH, ELEMENT_SIZE):
-        pygame.draw.line(self.screen, BLACK, [x, 0], [x, HEIGHT])
 
       for event in pygame.event.get():
-          if event.type == PIECEEVENT:
-            if piece.stop:
-                ## Check if we made any lines
-              lines = self.landed_pieces.check_lines()
-              if len(lines) > 0:
-                self.landed_pieces.clear_lines(lines)
+        if event.type == GAME_TICK:
+          # Draw Grid
+          self.screen.fill(BLACK)
+          for y in range(0, HEIGHT, ELEMENT_SIZE):
+            pygame.draw.line(self.screen, GREY, [0, y], [WIDTH, y])
+          for x in range(0, WIDTH, ELEMENT_SIZE):
+            pygame.draw.line(self.screen, GREY, [x, 0], [x, HEIGHT])
+          self.landed_pieces.draw(self.screen)
+          piece.draw(self.screen)
 
-              if self.piece_counter == 7:
-                random.shuffle(self.piece_list)
-                self.piece_counter = 0
-              piece = Piece(self.piece_list[self.piece_counter])
-              self.piece_counter += 1
-            else:
-              piece.update(self.landed_pieces)
-          if event.type == pygame.QUIT:
+          if piece.stop:
+            self.landed_pieces.store(piece)
+
+          pygame.display.update()
+        if event.type == PIECEEVENT:
+          if piece.stop:
+              ## Check if we made any lines
+            lines = self.landed_pieces.check_lines()
+            if len(lines) > 0:
+              self.landed_pieces.clear_lines(lines)
+
+            if self.piece_counter == 7:
+              random.shuffle(self.piece_list)
+              self.piece_counter = 0
+            piece = Piece(self.piece_list[self.piece_counter])
+            self.piece_counter += 1
+          else:
+            piece.update(self.landed_pieces)
+        if event.type == pygame.QUIT:
+          game_over = True
+        elif event.type == pygame.KEYDOWN:
+          if event.key == pygame.K_a or event.key == pygame.K_LEFT:
+            piece.moveLeft(self.landed_pieces)
+          if event.key == pygame.K_d or event.key == pygame.K_RIGHT:
+            piece.moveRight(self.landed_pieces)
+          if event.key == pygame.K_s or event.key == pygame.K_DOWN:
+            piece.moveDown(self.landed_pieces)
+          if event.key == pygame.K_e:
+            piece.rotateRight(self.landed_pieces)
+          if event.key == pygame.K_q:
+            piece.rotateLeft(self.landed_pieces)
+          if event.key == pygame.K_ESCAPE:
             game_over = True
-          elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_a or event.key == pygame.K_LEFT:
-              piece.moveLeft(self.landed_pieces)
-            if event.key == pygame.K_d or event.key == pygame.K_RIGHT:
-              piece.moveRight(self.landed_pieces)
-            if event.key == pygame.K_s or event.key == pygame.K_DOWN:
-              piece.moveDown(self.landed_pieces)
-            if event.key == pygame.K_e:
-              piece.rotateRight(self.landed_pieces)
-            if event.key == pygame.K_q:
-              piece.rotateLeft(self.landed_pieces)
-            if event.key == pygame.K_ESCAPE:
-              game_over = True
-
-      self.landed_pieces.draw(self.screen)
-      piece.draw(self.screen)
-
-      if piece.stop:
-        self.landed_pieces.store(piece)
-
-      pygame.display.update()
 
 class Landed_Pieces:
   def __init__(self):
@@ -149,6 +150,12 @@ class Landed_Pieces:
             screen,
             self.grid[y][x],
             (x * ELEMENT_SIZE, y * ELEMENT_SIZE, ELEMENT_SIZE, ELEMENT_SIZE)
+          )
+          pygame.draw.rect(
+            screen,
+            BLACK,
+            (x * ELEMENT_SIZE, y * ELEMENT_SIZE, ELEMENT_SIZE, ELEMENT_SIZE),
+            1
           )
           
 
@@ -227,9 +234,21 @@ class Piece:
 
   def draw(self, screen):
     for element in self.elements:
+      x = self.pos[0] + element[0] 
+      y = self.pos[1] + element[1]
       pygame.draw.rect(screen, self.color, (
-        (self.pos[0] + element[0]) * ELEMENT_SIZE,
-        (self.pos[1] + element[1]) * ELEMENT_SIZE, ELEMENT_SIZE, ELEMENT_SIZE))
+        x * ELEMENT_SIZE,
+        y * ELEMENT_SIZE,
+        ELEMENT_SIZE,
+        ELEMENT_SIZE))
+      
+      pygame.draw.rect(screen, BLACK,(
+        (x * ELEMENT_SIZE),
+        (y * ELEMENT_SIZE),
+        ELEMENT_SIZE,
+        ELEMENT_SIZE),
+        1
+      )
 
   def update(self, landed_pieces):
     for element in self.elements:
