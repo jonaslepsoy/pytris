@@ -1,5 +1,6 @@
 import pygame
 import random
+import copy
 
 FPS = 60
 GAME_SPEED = 2
@@ -262,7 +263,20 @@ class Piece:
 
     if not self.stop:
       self.pos = (self.pos[0], self.pos[1] + 1)
-  
+
+  def collision(self, virtual_piece, landed_pieces):
+    virtual_piece.elements = virtual_piece.rotationMatrix[virtual_piece.rotationValue]
+    for element in virtual_piece.elements:
+      if virtual_piece.pos[0] + element[0] < 0:
+        return True # Collision: Left wall
+      if virtual_piece.pos[0] + element[0] >= BLOCKS_WIDTH:
+        return True # Collision: Right wall
+      elif virtual_piece.pos[1] + element[1] > BLOCKS_HEIGHT - 1:
+        return True # Collision: Bottom
+      elif landed_pieces.get_square(virtual_piece.pos[0] + element[0], virtual_piece.pos[1] + element[1]) != 0:
+        return True # Collision: Landed piece below
+    return False # No collision
+
   def moveLeft(self, landed_pieces):
     can_move = True
     for element in self.elements:
@@ -297,23 +311,39 @@ class Piece:
 
   def rotateRight(self, landed_pieces):
     if not self.stop:
-      if not self.type == 1:
-        #TODO: Check if we actually can perform the rotation
-        if self.rotationValue == 3:
-          self.rotationValue = 0
+      if not self.type == 1: # We don't rotate squares
+        # Check self.rotationMatrix[self.rotationValue] for any piece out of bounds.
+        piece_copy = copy.deepcopy(self)
+        if piece_copy.rotationValue == 3:
+          piece_copy.rotationValue = 0
         else:
-          self.rotationValue += 1
-        self.elements = self.rotationMatrix[self.rotationValue]
+          piece_copy.rotationValue += 1
+        
+        if not self.collision(piece_copy, landed_pieces):
+          if self.rotationValue == 3:
+            self.rotationValue = 0
+          else:
+            self.rotationValue += 1
+          self.elements = self.rotationMatrix[self.rotationValue]
   
   def rotateLeft(self, landed_pieces):
     if not self.stop:
       if not self.type == 1:
-        #TODO: Check if we actually can perform the rotation
-        if self.rotationValue == 0:
-          self.rotationValue = 3
+        # Check self.rotationMatrix[self.rotationValue] for any piece out of bounds.
+        piece_copy = copy.deepcopy(self)
+        if piece_copy.rotationValue == 0:
+          piece_copy.rotationValue = 3
         else:
-          self.rotationValue -= 1
-        self.elements = self.rotationMatrix[self.rotationValue]
+          piece_copy.rotationValue -= 1
+        
+        if not self.collision(piece_copy, landed_pieces):
+          if self.rotationValue == 0:
+            self.rotationValue = 3
+          else:
+            self.rotationValue -= 1
+          self.elements = self.rotationMatrix[self.rotationValue]
+
+
 
 def main():
   game = Game()
