@@ -5,10 +5,12 @@ import types
 
 FPS = 60
 GAME_SPEED = 4
+MOVE_SPEED = 24
+CLEARING_SPEED = 15
 
-ELEMENT_SIZE = 48
+ELEMENT_SIZE = 40
 BLOCKS_WIDTH = 10
-BLOCKS_HEIGHT = 20
+BLOCKS_HEIGHT = 22
 WIDTH = ELEMENT_SIZE * BLOCKS_WIDTH
 HEIGHT = ELEMENT_SIZE * BLOCKS_HEIGHT
 
@@ -39,6 +41,11 @@ T = 7
 
 GAME_TICK = pygame.USEREVENT + 1
 PIECEEVENT = pygame.USEREVENT + 2
+MOVEEVENT = pygame.USEREVENT + 3
+CLEARINGEVENT = pygame.USEREVENT + 4
+
+GAME_RUNNING = 1
+CLEARING_LINES = 2
 
 class Game:
   def __init__(self):
@@ -63,21 +70,26 @@ class Game:
     self.landed_pieces = Landed_Pieces()
     self.piece_list = [1,2,3,4,5,6,7]
     random.shuffle(self.piece_list)
+    self.lines_to_clear = []
     self.piece_counter = 0
+    self.state = GAME_RUNNING
     self.screen = pygame.display.set_mode([WIDTH, HEIGHT])
     pygame.time.set_timer(GAME_TICK, 1000 // FPS)
     pygame.time.set_timer(PIECEEVENT, 1000 // GAME_SPEED)
+    pygame.time.set_timer(MOVEEVENT, 1000 // MOVE_SPEED)
+    pygame.time.set_timer(CLEARINGEVENT, 1000 // CLEARING_SPEED)
 
   def run(self):
     print("Running game")
     game_over = False
+    clearing_animation = []
+    clearing_animation_frame = 5
 
     piece = Piece(self.piece_list[self.piece_counter])
     self.piece_counter += 1
 
     while not game_over:
       self.clock.tick(FPS)
-
       for event in pygame.event.get():
         if event.type == GAME_TICK:
           # Draw Grid
@@ -87,10 +99,31 @@ class Game:
           for x in range(0, WIDTH, ELEMENT_SIZE):
             pygame.draw.line(self.screen, GREY, [x, 0], [x, HEIGHT])
           self.landed_pieces.draw(self.screen)
-          piece.draw(self.screen)
-
-
-          pygame.display.update()
+          
+          if self.state == GAME_RUNNING:
+            piece.draw(self.screen)
+          
+          # Black top bar from line 21 and up
+          # TODO: Replace with something nicer?
+          pygame.draw.rect(
+            self.screen,
+            BLACK,
+            (0, 0, BLOCKS_WIDTH * ELEMENT_SIZE, ELEMENT_SIZE * 2)
+          )
+          
+          # Draw clearing animation
+          for frame in clearing_animation:
+            pygame.draw.rect(
+              self.screen,
+              WHITE,
+              (frame[0] * ELEMENT_SIZE, frame[1] * ELEMENT_SIZE, ELEMENT_SIZE, ELEMENT_SIZE)
+            )
+            pygame.draw.rect(
+              self.screen,
+              BLACK,
+              (frame[0] * ELEMENT_SIZE, frame[1] * ELEMENT_SIZE, ELEMENT_SIZE, ELEMENT_SIZE),
+              1
+            )
 
         if event.type == PIECEEVENT:
           if piece.stop:
@@ -105,34 +138,84 @@ class Game:
                 self.sounds.matchMoreSound.play()
               else:
                 self.sounds.match1Sound.play()
-              self.landed_pieces.clear_lines(lines)
+              self.state = CLEARING_LINES
+              self.lines_to_clear = lines
 
             if self.piece_counter == 7:
               random.shuffle(self.piece_list)
               self.piece_counter = 0
             piece = Piece(self.piece_list[self.piece_counter])
+            if piece.collision(piece, self.landed_pieces):
+              game_over = True
             self.piece_counter += 1
-          else:
+          elif self.state == GAME_RUNNING:
             piece.update(self.landed_pieces)
         if event.type == pygame.QUIT:
           game_over = True
-        elif event.type == pygame.KEYDOWN:
-          if event.key == pygame.K_a or event.key == pygame.K_LEFT:
-            piece.moveLeft(self.landed_pieces, self.sounds)
-          if event.key == pygame.K_d or event.key == pygame.K_RIGHT:
-            piece.moveRight(self.landed_pieces, self.sounds)
-          if event.key == pygame.K_s or event.key == pygame.K_DOWN:
-            piece.moveDown(self.landed_pieces)
+        
+        #Keypress events
+        if event.type == pygame.KEYDOWN:
+          if event.key == pygame.K_ESCAPE:
+            game_over = True
           if event.key == pygame.K_e:
             piece.rotateRight(self.landed_pieces, self.sounds)
           if event.key == pygame.K_q:
             piece.rotateLeft(self.landed_pieces, self.sounds)
-          if event.key == pygame.K_ESCAPE:
-            game_over = True
+          if event.key == pygame.K_a or event.key == pygame.K_LEFT:
+            #piece.move_left = True
+            #piece.move_intention = LEFT
+            piece.moveLeft(self.landed_pieces, self.sounds)
+          if event.key == pygame.K_d or event.key == pygame.K_RIGHT:
+            #piece.move_right = True
+            #piece.move_intention = RIGHT
+            piece.moveRight(self.landed_pieces, self.sounds)
+          if event.key == pygame.K_s or event.key == pygame.K_DOWN:
+            piece.move_down = True
+            piece.move_intention = DOWN
+        if event.type == pygame.KEYUP:
+          #if event.key == pygame.K_a or event.key == pygame.K_LEFT:
+            #piece.move_left = False
+          #if event.key == pygame.K_d or event.key == pygame.K_RIGHT:
+            #piece.move_right = False
+          if event.key == pygame.K_s or event.key == pygame.K_DOWN:
+            piece.move_down = False
 
+        if event.type == CLEARINGEVENT:
+          if self.state == CLEARING_LINES:
+            # If we cleared some lines, we'll have to prepare the animation here, but draw it on every frame
+            if clearing_animation_frame >= 0: # 5 frames of animation
+              for x in range(clearing_animation_frame, (BLOCKS_WIDTH // 2)): 
+                for y in self.lines_to_clear:
+                  clearing_animation.append((x,y))
+              for x in range(BLOCKS_WIDTH // 2, BLOCKS_WIDTH - clearing_animation_frame):
+                for y in self.lines_to_clear:
+                  clearing_animation.append((x,y))
+              clearing_animation_frame -= 1
+            else:
+              self.landed_pieces.clear_lines(self.lines_to_clear)
+              self.lines_to_clear = []
+              clearing_animation = []
+              clearing_animation_frame = 5
+              self.state = GAME_RUNNING
+
+        # Move event logic
+        if event.type == MOVEEVENT:
+          if piece.move_down or piece.move_intention == DOWN:
+            piece.moveDown(self.landed_pieces)
+            piece.move_intention = None
+          #if piece.move_left or piece.move_intention == LEFT:
+          #  piece.moveLeft(self.landed_pieces, self.sounds)
+          #  piece.move_intention = None
+          #if piece.move_right or piece.move_intention == RIGHT:
+          #  piece.moveRight(self.landed_pieces, self.sounds)
+          #  piece.move_intention = None
+      pygame.display.update()
+    # Game over logic / animation
+    print("Thank you for playing!")
+
+          
 class Landed_Pieces:
   def __init__(self):
-    print("We got the pieces")
     self.grid = [[0]*BLOCKS_WIDTH for i in range(BLOCKS_HEIGHT)]
   
   def check_lines(self):
@@ -178,16 +261,17 @@ class Landed_Pieces:
             (x * ELEMENT_SIZE, y * ELEMENT_SIZE, ELEMENT_SIZE, ELEMENT_SIZE),
             1
           )
-          
 
 class Piece:
   def __init__(self, type):
-    print("New piece")
-
     self.pos = (4, 0)
     self.stop = False
     self.rotationValue = 1
     self.moved_this_cycle = False
+    self.move_intention = None
+    self.move_down = False
+    self.move_left = False
+    self.move_right = False
 
     match type:
       case 1:
@@ -312,9 +396,9 @@ class Piece:
   def moveLeft(self, landed_pieces, sounds):
     can_move = True
     for element in self.elements:
-      if self.pos[0] + element[0] == 0:
+      if self.pos[0] + element[0] == 0: # Prefer collision test?
         can_move = False
-      elif landed_pieces.get_square(self.pos[0] + element[0] - 1, self.pos[1] + element[1]) != 0:
+      elif landed_pieces.get_square(self.pos[0] + element[0] - 1, self.pos[1] + element[1]) != 0: # Prefer collision test?
         can_move = False
 
     if can_move and not self.stop:
@@ -324,9 +408,9 @@ class Piece:
   def moveRight(self, landed_pieces, sounds):
     can_move = True
     for element in self.elements:
-      if self.pos[0] + element[0] == BLOCKS_WIDTH - 1:
+      if self.pos[0] + element[0] == BLOCKS_WIDTH - 1: # Prefer collision test?
         can_move = False
-      elif landed_pieces.get_square(self.pos[0] + element[0] + 1, self.pos[1] + element[1]) != 0:
+      elif landed_pieces.get_square(self.pos[0] + element[0] + 1, self.pos[1] + element[1]) != 0: # Prefer collision test?
         can_move = False
 
     if can_move and not self.stop:
