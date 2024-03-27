@@ -1,9 +1,10 @@
 import pygame
 import random
 import copy
+import types
 
 FPS = 60
-GAME_SPEED = 2
+GAME_SPEED = 4
 
 ELEMENT_SIZE = 48
 BLOCKS_WIDTH = 10
@@ -43,6 +44,18 @@ class Game:
   def __init__(self):
     print("New game")
     pygame.init()
+    pygame.mixer.init()
+    
+    pygame.mixer.music.load("19.mp3")
+    pygame.mixer.music.play(-1)
+
+    self.sounds = types.SimpleNamespace()
+    self.sounds.moveSound = pygame.mixer.Sound("se_game_move.wav")
+    self.sounds.landingSound = pygame.mixer.Sound("se_game_landing.wav")
+    self.sounds.match1Sound = pygame.mixer.Sound("se_game_count.wav")
+    self.sounds.matchMoreSound = pygame.mixer.Sound("se_game_double.wav")
+    self.sounds.matchTetrisSound = pygame.mixer.Sound("se_game_perfect.wav")
+    self.sounds.rotateSound = pygame.mixer.Sound("se_game_rotate.wav")
 
     self.clock = pygame.time.Clock()
     pygame.display.set_caption("PyTris Game")
@@ -76,15 +89,22 @@ class Game:
           self.landed_pieces.draw(self.screen)
           piece.draw(self.screen)
 
-          if piece.stop:
-            self.landed_pieces.store(piece)
 
           pygame.display.update()
+
         if event.type == PIECEEVENT:
           if piece.stop:
+            self.landed_pieces.store(piece, self.sounds)
               ## Check if we made any lines
             lines = self.landed_pieces.check_lines()
             if len(lines) > 0:
+              #TODO: Indicate visually that a line is going to be cleared.
+              if len(lines) >= 4:
+                self.sounds.matchTetrisSound.play()
+              elif len(lines) > 1:
+                self.sounds.matchMoreSound.play()
+              else:
+                self.sounds.match1Sound.play()
               self.landed_pieces.clear_lines(lines)
 
             if self.piece_counter == 7:
@@ -98,15 +118,15 @@ class Game:
           game_over = True
         elif event.type == pygame.KEYDOWN:
           if event.key == pygame.K_a or event.key == pygame.K_LEFT:
-            piece.moveLeft(self.landed_pieces)
+            piece.moveLeft(self.landed_pieces, self.sounds)
           if event.key == pygame.K_d or event.key == pygame.K_RIGHT:
-            piece.moveRight(self.landed_pieces)
+            piece.moveRight(self.landed_pieces, self.sounds)
           if event.key == pygame.K_s or event.key == pygame.K_DOWN:
             piece.moveDown(self.landed_pieces)
           if event.key == pygame.K_e:
-            piece.rotateRight(self.landed_pieces)
+            piece.rotateRight(self.landed_pieces, self.sounds)
           if event.key == pygame.K_q:
-            piece.rotateLeft(self.landed_pieces)
+            piece.rotateLeft(self.landed_pieces, self.sounds)
           if event.key == pygame.K_ESCAPE:
             game_over = True
 
@@ -124,24 +144,24 @@ class Landed_Pieces:
           line_full = False
       if line_full:
         lines_to_clear.append(y)
+
     return lines_to_clear
 
   def clear_lines(self, lines):
-    print("Clearing some lines")
     for line in lines:
       self.grid.pop(line)
       self.grid.insert(0, [0]*BLOCKS_WIDTH)
 
   def get_square(self, x, y):
-    #print("Checking", y, BLOCKS_HEIGHT)
     if y < BLOCKS_HEIGHT:
       return self.grid[y][x]
 
-  def store(self, piece):
+  def store(self, piece, sounds):
     for element in piece.elements:
       x = piece.pos[0] + element[0]
       y = piece.pos[1] + element[1]
       self.grid[y][x] = piece.color
+    sounds.landingSound.play()
 
   def draw(self, screen):
     for x in range(0, BLOCKS_WIDTH):
@@ -167,11 +187,19 @@ class Piece:
     self.pos = (4, 0)
     self.stop = False
     self.rotationValue = 1
+    self.moved_this_cycle = False
+
     match type:
       case 1:
         self.type = SQUARE
         self.color = YELLOW
         self.elements = [(0,0), (1,0), (0,1), (1,1)]
+        self.rotationMatrix = [
+          [(0,0), (1,0), (0,1), (1,1)],
+          [(0,0), (1,0), (0,1), (1,1)],
+          [(0,0), (1,0), (0,1), (1,1)],
+          [(0,0), (1,0), (0,1), (1,1)]
+        ]
       case 2:
         self.type = LINE
         self.color = LIGHT_BLUE
@@ -252,16 +280,20 @@ class Piece:
       )
 
   def update(self, landed_pieces):
+    if self.moved_this_cycle:
+      self.moved_this_cycle = False
+      return
+
     for element in self.elements:
       y = self.pos[1] + element[1] + 1
       x = self.pos[0] + element[0]
       if self.pos[1] + element[1] == BLOCKS_HEIGHT - 1:
-        print("something below me!")
+        #Something below
         self.stop = True
       elif landed_pieces.get_square(x, y) != 0:
         self.stop = True
 
-    if not self.stop:
+    if not self.stop and not self.moved_this_cycle:
       self.pos = (self.pos[0], self.pos[1] + 1)
 
   def collision(self, virtual_piece, landed_pieces):
@@ -277,7 +309,7 @@ class Piece:
         return True # Collision: Landed piece below
     return False # No collision
 
-  def moveLeft(self, landed_pieces):
+  def moveLeft(self, landed_pieces, sounds):
     can_move = True
     for element in self.elements:
       if self.pos[0] + element[0] == 0:
@@ -286,9 +318,10 @@ class Piece:
         can_move = False
 
     if can_move and not self.stop:
+      sounds.moveSound.play()
       self.pos = (self.pos[0] - 1, self.pos[1])
 
-  def moveRight(self, landed_pieces):
+  def moveRight(self, landed_pieces, sounds):
     can_move = True
     for element in self.elements:
       if self.pos[0] + element[0] == BLOCKS_WIDTH - 1:
@@ -297,19 +330,20 @@ class Piece:
         can_move = False
 
     if can_move and not self.stop:
+      sounds.moveSound.play()
       self.pos = (self.pos[0] + 1, self.pos[1])
 
   def moveDown(self, landed_pieces):
     can_move = True
-
-    for element in self.elements:
-      if landed_pieces.get_square(self.pos[0] + element[0], self.pos[1] + element[1] + 1) != 0:
-        can_move = False
+    piece_copy = copy.deepcopy(self)
+    piece_copy.pos = (piece_copy.pos[0], piece_copy.pos[1] + 1)
+    can_move = not self.collision(piece_copy, landed_pieces)
 
     if can_move and not self.stop:
       self.pos = (self.pos[0], self.pos[1] + 1)
+      self.moved_this_cycle = True
 
-  def rotateRight(self, landed_pieces):
+  def rotateRight(self, landed_pieces, sounds):
     if not self.stop:
       if not self.type == 1: # We don't rotate squares
         # Check self.rotationMatrix[self.rotationValue] for any piece out of bounds.
@@ -324,9 +358,10 @@ class Piece:
             self.rotationValue = 0
           else:
             self.rotationValue += 1
+          sounds.rotateSound.play()
           self.elements = self.rotationMatrix[self.rotationValue]
   
-  def rotateLeft(self, landed_pieces):
+  def rotateLeft(self, landed_pieces, sounds):
     if not self.stop:
       if not self.type == 1:
         # Check self.rotationMatrix[self.rotationValue] for any piece out of bounds.
@@ -341,9 +376,8 @@ class Piece:
             self.rotationValue = 3
           else:
             self.rotationValue -= 1
+          sounds.rotateSound.play()
           self.elements = self.rotationMatrix[self.rotationValue]
-
-
 
 def main():
   game = Game()
