@@ -53,8 +53,9 @@ class Game:
     pygame.init()
     pygame.mixer.init()
     
-    pygame.mixer.music.load("19.mp3")
-    pygame.mixer.music.play(-1)
+    #Uncomment the following two lines and add a track for background music
+    #pygame.mixer.music.load("music.mp3")
+    #pygame.mixer.music.play(-1)
 
     self.sounds = types.SimpleNamespace()
     self.sounds.moveSound = pygame.mixer.Sound("se_game_move.wav")
